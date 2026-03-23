@@ -80,16 +80,18 @@ const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
 const easePower2In = (progress: number) => progress ** 3;
 const BATCH_BAR_BASE_TRANSFORM = 'translateX(-50%)';
 const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
-const DEFAULT_REGULAR_PAGE_SIZE = 12;
+const DEFAULT_REGULAR_PAGE_SIZE = 8;
 const DEFAULT_COMPACT_PAGE_SIZE = 15;
-const AUTH_FILES_MAX_PAGE_SIZE = 16;
+const AUTH_FILES_MAX_REGULAR_PAGE_SIZE = 12;
+const AUTH_FILES_MAX_COMPACT_PAGE_SIZE = 15;
 const AUTH_FILES_MOBILE_BREAKPOINT = 768;
 const AUTH_FILES_TABLET_BREAKPOINT = 1200;
-type MessageQuickFilter = 'all' | 'usage_limit_reached' | 'invalidated';
+type MessageQuickFilter = 'all' | 'usage_limit_reached' | 'invalidated' | 'timeout';
 
 const MESSAGE_QUICK_FILTER_MATCHERS: Record<Exclude<MessageQuickFilter, 'all'>, string[]> = {
   usage_limit_reached: ['usage_limit_reached'],
   invalidated: ['your authentication token has been invalidated', 'invalidated'],
+  timeout: ['timeout', 'timed out'],
 };
 
 type RefreshableQuotaConfig = {
@@ -103,6 +105,83 @@ type RefreshableQuotaConfig = {
     | 'setCodexQuota'
     | 'setGeminiCliQuota'
     | 'setKimiQuota';
+};
+
+const toQuotaFraction = (value: number | null | undefined) =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : null;
+
+const toQuotaPercentFraction = (value: number | null | undefined) =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(1, 1 - value / 100))
+    : null;
+
+const averageFractions = (fractions: Array<number | null>) => {
+  const valid = fractions.filter((value): value is number => value !== null);
+  if (valid.length === 0) return -1;
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+};
+
+const resolveQuotaSortMetrics = (params: {
+  file: AuthFileItem;
+  antigravityQuota: Record<string, AntigravityQuotaState>;
+  claudeQuota: Record<string, ClaudeQuotaState>;
+  codexQuota: Record<string, CodexQuotaState>;
+  geminiCliQuota: Record<string, GeminiCliQuotaState>;
+  kimiQuota: Record<string, KimiQuotaState>;
+}) => {
+  const { file, antigravityQuota, claudeQuota, codexQuota, geminiCliQuota, kimiQuota } = params;
+  const provider = resolveAuthProvider(file);
+
+  if (provider === 'antigravity') {
+    const quota = antigravityQuota[file.name];
+    const value = averageFractions(
+      quota?.groups.map((group) => toQuotaFraction(group.remainingFraction)) ?? []
+    );
+    return { value, prioritize: quota?.status === 'error' || value < 0 };
+  }
+
+  if (provider === 'claude') {
+    const quota = claudeQuota[file.name];
+    const value = averageFractions(
+      quota?.windows.map((window) => toQuotaPercentFraction(window.usedPercent)) ?? []
+    );
+    return { value, prioritize: quota?.status === 'error' || value < 0 };
+  }
+
+  if (provider === 'codex') {
+    const quota = codexQuota[file.name];
+    const value = averageFractions(
+      quota?.windows.map((window) => toQuotaPercentFraction(window.usedPercent)) ?? []
+    );
+    return { value, prioritize: quota?.status === 'error' || value < 0 };
+  }
+
+  if (provider === 'gemini-cli') {
+    const quota = geminiCliQuota[file.name];
+    const bucketFractions =
+      quota?.buckets.map((bucket) => toQuotaFraction(bucket.remainingFraction)) ?? [];
+    if (bucketFractions.some((value) => value !== null)) {
+      return { value: averageFractions(bucketFractions), prioritize: quota?.status === 'error' };
+    }
+    if (typeof quota?.creditBalance === 'number' && Number.isFinite(quota.creditBalance)) {
+      return { value: quota.creditBalance, prioritize: quota?.status === 'error' };
+    }
+    return { value: -1, prioritize: quota?.status === 'error' || Boolean(quota) };
+  }
+
+  if (provider === 'kimi') {
+    const quota = kimiQuota[file.name];
+    const rowFractions =
+      quota?.rows.map((row) =>
+        typeof row.limit === 'number' && row.limit > 0 && Number.isFinite(row.used)
+          ? toQuotaFraction((row.limit - row.used) / row.limit)
+          : null
+      ) ?? [];
+    const value = averageFractions(rowFractions);
+    return { value, prioritize: quota?.status === 'error' || value < 0 };
+  }
+
+  return { value: -1, prioritize: false };
 };
 
 const buildQuotaStateSearchText = (
@@ -248,8 +327,11 @@ const hasVisibleQuotaContent = (
   return false;
 };
 
-const clampAuthFilesPageSize = (value: number) =>
-  Math.min(AUTH_FILES_MAX_PAGE_SIZE, clampCardPageSize(value));
+const getAuthFilesMaxPageSize = (compactMode: boolean) =>
+  compactMode ? AUTH_FILES_MAX_COMPACT_PAGE_SIZE : AUTH_FILES_MAX_REGULAR_PAGE_SIZE;
+
+const clampAuthFilesPageSize = (value: number, compactMode: boolean) =>
+  Math.min(getAuthFilesMaxPageSize(compactMode), clampCardPageSize(value));
 
 const resolveGridColumnCount = (width: number, compactMode: boolean, quotaFilterType: QuotaProviderType | null) => {
   if (width <= AUTH_FILES_MOBILE_BREAKPOINT) return 1;
@@ -275,7 +357,7 @@ const resolveAdaptivePageSize = (params: {
   const availableHeight = Math.max(estimatedCardHeight, height - reservedHeight);
   const baseRows = Math.max(1, Math.floor(availableHeight / estimatedCardHeight));
   const rows = compactMode ? baseRows : baseRows + 1;
-  return clampAuthFilesPageSize(columns * rows);
+  return clampAuthFilesPageSize(columns * rows, compactMode);
 };
 
 export function AuthFilesPage() {
@@ -293,7 +375,6 @@ export function AuthFilesPage() {
   const navigate = useNavigate();
 
   const [filter, setFilter] = useState<'all' | string>('all');
-  const [accountFilter, setAccountFilter] = useState('all');
   const [messageFilter, setMessageFilter] = useState('');
   const [messageQuickFilter, setMessageQuickFilter] = useState<MessageQuickFilter>('all');
   const [problemOnly, setProblemOnly] = useState(false);
@@ -304,7 +385,7 @@ export function AuthFilesPage() {
     regular: DEFAULT_REGULAR_PAGE_SIZE,
     compact: DEFAULT_COMPACT_PAGE_SIZE,
   });
-  const [pageSizeInput, setPageSizeInput] = useState('12');
+  const [pageSizeInput, setPageSizeInput] = useState('8');
   const [viewMode, setViewMode] = useState<'diagram' | 'list'>('list');
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
@@ -403,16 +484,14 @@ export function AuthFilesPage() {
     if (typeof persisted.filter === 'string' && persisted.filter.trim()) {
       setFilter(persisted.filter);
     }
-    if (typeof persisted.accountFilter === 'string' && persisted.accountFilter.trim()) {
-      setAccountFilter(persisted.accountFilter);
-    }
     if (typeof persisted.messageFilter === 'string') {
       setMessageFilter(persisted.messageFilter);
     }
     if (
       persisted.messageQuickFilter === 'all' ||
       persisted.messageQuickFilter === 'usage_limit_reached' ||
-      persisted.messageQuickFilter === 'invalidated'
+      persisted.messageQuickFilter === 'invalidated' ||
+      persisted.messageQuickFilter === 'timeout'
     ) {
       setMessageQuickFilter(persisted.messageQuickFilter);
     }
@@ -430,15 +509,15 @@ export function AuthFilesPage() {
     }
     const legacyPageSize =
       typeof persisted.pageSize === 'number' && Number.isFinite(persisted.pageSize)
-        ? clampAuthFilesPageSize(persisted.pageSize)
+        ? clampAuthFilesPageSize(persisted.pageSize, false)
         : null;
     const regularPageSize =
       typeof persisted.regularPageSize === 'number' && Number.isFinite(persisted.regularPageSize)
-        ? clampAuthFilesPageSize(persisted.regularPageSize)
+        ? clampAuthFilesPageSize(persisted.regularPageSize, false)
         : legacyPageSize ?? DEFAULT_REGULAR_PAGE_SIZE;
     const compactPageSize =
       typeof persisted.compactPageSize === 'number' && Number.isFinite(persisted.compactPageSize)
-        ? clampAuthFilesPageSize(persisted.compactPageSize)
+        ? clampAuthFilesPageSize(persisted.compactPageSize, true)
         : legacyPageSize ?? DEFAULT_COMPACT_PAGE_SIZE;
     setPageSizeByMode({
       regular: regularPageSize,
@@ -452,7 +531,6 @@ export function AuthFilesPage() {
   useEffect(() => {
     writeAuthFilesUiState({
       filter,
-      accountFilter,
       messageFilter,
       messageQuickFilter,
       problemOnly,
@@ -466,7 +544,6 @@ export function AuthFilesPage() {
     });
   }, [
     filter,
-    accountFilter,
     messageFilter,
     messageQuickFilter,
     problemOnly,
@@ -522,7 +599,7 @@ export function AuthFilesPage() {
       return;
     }
 
-    const next = clampAuthFilesPageSize(value);
+    const next = clampAuthFilesPageSize(value, compactMode);
     setCurrentModePageSize(next);
     setPageSizeInput(String(next));
     setPage(1);
@@ -539,7 +616,7 @@ export function AuthFilesPage() {
     if (!Number.isFinite(parsed)) return;
 
     const rounded = Math.round(parsed);
-    if (rounded < MIN_CARD_PAGE_SIZE || rounded > AUTH_FILES_MAX_PAGE_SIZE) return;
+    if (rounded < MIN_CARD_PAGE_SIZE || rounded > getAuthFilesMaxPageSize(compactMode)) return;
 
     setCurrentModePageSize(rounded);
     setPage(1);
@@ -596,38 +673,13 @@ export function AuthFilesPage() {
       { value: 'default', label: t('auth_files.sort_default') },
       { value: 'az', label: t('auth_files.sort_az') },
       { value: 'priority', label: t('auth_files.sort_priority') },
+      {
+        value: 'quota',
+        label: t('auth_files.sort_quota', { defaultValue: '按配额排序' }),
+      },
     ],
     [t]
   );
-
-  const accountOptionFiles = useMemo(
-    () =>
-      filesMatchingProblemFilter.filter((item) => filter === 'all' || item.type === filter),
-    [filesMatchingProblemFilter, filter]
-  );
-
-  const accountOptions = useMemo(() => {
-    const accountSet = new Set<string>();
-    accountOptionFiles.forEach((file) => {
-      resolveAuthFileAccountCandidates(file).forEach((candidate) => accountSet.add(candidate));
-    });
-
-    return [
-      {
-        value: 'all',
-        label: t('auth_files.account_filter_all', { defaultValue: '全部账号' }),
-      },
-      ...Array.from(accountSet)
-        .sort((a, b) => a.localeCompare(b))
-        .map((account) => ({ value: account, label: account })),
-    ];
-  }, [accountOptionFiles, t]);
-
-  useEffect(() => {
-    if (accountFilter === 'all') return;
-    if (accountOptions.some((option) => option.value === accountFilter)) return;
-    setAccountFilter('all');
-  }, [accountFilter, accountOptions]);
 
   const typeCounts = useMemo(() => {
     const counts: Record<string, number> = { all: filesMatchingProblemFilter.length };
@@ -676,8 +728,6 @@ export function AuthFilesPage() {
     return filesMatchingProblemFilter.filter((item) => {
       const matchType = filter === 'all' || item.type === filter;
       const accountCandidates = resolveAuthFileAccountCandidates(item);
-      const matchAccount =
-        accountFilter === 'all' || accountCandidates.includes(accountFilter.toLowerCase());
       const messageText = getAuthFileMessageText(item).toLowerCase();
       const quotaText = quotaSearchTexts.get(item.name) ?? '';
       const messageTerm = messageFilter.trim().toLowerCase();
@@ -697,9 +747,9 @@ export function AuthFilesPage() {
         messageText.includes(term) ||
         accountSearchText.includes(term) ||
         quotaText.includes(term);
-      return matchType && matchAccount && matchMessage && matchQuickMessage && matchSearch;
+      return matchType && matchMessage && matchQuickMessage && matchSearch;
     });
-  }, [filesMatchingProblemFilter, filter, accountFilter, messageFilter, messageQuickFilter, search, quotaSearchTexts]);
+  }, [filesMatchingProblemFilter, filter, messageFilter, messageQuickFilter, search, quotaSearchTexts]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -719,9 +769,33 @@ export function AuthFilesPage() {
         const pb = parsePriorityValue(b.priority ?? b['priority']) ?? 0;
         return pb - pa; // 高优先级排前面
       });
+    } else if (sortMode === 'quota') {
+      copy.sort((a, b) => {
+        const quotaA = resolveQuotaSortMetrics({
+          file: a,
+          antigravityQuota,
+          claudeQuota,
+          codexQuota,
+          geminiCliQuota,
+          kimiQuota,
+        });
+        const quotaB = resolveQuotaSortMetrics({
+          file: b,
+          antigravityQuota,
+          claudeQuota,
+          codexQuota,
+          geminiCliQuota,
+          kimiQuota,
+        });
+        if (quotaA.prioritize !== quotaB.prioritize) return quotaA.prioritize ? -1 : 1;
+        if (quotaA.value === quotaB.value) return a.name.localeCompare(b.name);
+        if (quotaA.value < 0) return 1;
+        if (quotaB.value < 0) return -1;
+        return quotaA.value - quotaB.value;
+      });
     }
     return copy;
-  }, [filtered, sortMode]);
+  }, [filtered, sortMode, antigravityQuota, claudeQuota, codexQuota, geminiCliQuota, kimiQuota]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -1248,7 +1322,7 @@ export function AuthFilesPage() {
                       className={styles.pageSizeSelect}
                       type="number"
                       min={MIN_CARD_PAGE_SIZE}
-                      max={AUTH_FILES_MAX_PAGE_SIZE}
+                      max={getAuthFilesMaxPageSize(compactMode)}
                     step={1}
                     value={pageSizeInput}
                     onChange={handlePageSizeChange}
@@ -1268,24 +1342,6 @@ export function AuthFilesPage() {
                     options={sortOptions}
                     onChange={handleSortModeChange}
                     ariaLabel={t('auth_files.sort_label')}
-                    fullWidth
-                  />
-                </div>
-                <div className={styles.filterItem}>
-                  <label>
-                    {t('auth_files.account_filter_label', { defaultValue: '账号筛选' })}
-                  </label>
-                  <Select
-                    className={styles.sortSelect}
-                    value={accountFilter}
-                    options={accountOptions}
-                    onChange={(value) => {
-                      setAccountFilter(value);
-                      setPage(1);
-                    }}
-                    ariaLabel={t('auth_files.account_filter_label', {
-                      defaultValue: '账号筛选',
-                    })}
                     fullWidth
                   />
                 </div>
@@ -1365,6 +1421,20 @@ export function AuthFilesPage() {
                 >
                   {t('auth_files.message_quick_invalidated', {
                     defaultValue: 'invalidated',
+                  })}
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.messageQuickFilter} ${
+                    messageQuickFilter === 'timeout' ? styles.messageQuickFilterActive : ''
+                  }`}
+                  onClick={() => {
+                    setMessageQuickFilter('timeout');
+                    setPage(1);
+                  }}
+                >
+                  {t('auth_files.message_quick_timeout', {
+                    defaultValue: 'timeout',
                   })}
                 </button>
               </div>

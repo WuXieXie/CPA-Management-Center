@@ -474,6 +474,7 @@
 
 .filterToggleItem {
   min-width: 0;
+  grid-column: -2 / -1;
 
   @include tablet {
     grid-column: 1 / -1;
@@ -1333,12 +1334,12 @@
 }
 
 .cardMeta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 
   @include mobile {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 }
 
@@ -1369,30 +1370,32 @@
 }
 
 .metaItem {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  padding: 8px 9px;
-  border-radius: 10px;
+  padding: 7px 10px;
+  border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
   background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  flex: 0 1 auto;
 }
 
 .metaLabel {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-tertiary);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .metaValue {
   min-width: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.45;
-  word-break: break-word;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .priorityBadge {

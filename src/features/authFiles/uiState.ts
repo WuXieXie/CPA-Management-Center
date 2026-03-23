@@ -1,10 +1,9 @@
-export const AUTH_FILES_SORT_MODES = ['default', 'az', 'priority'] as const;
+export const AUTH_FILES_SORT_MODES = ['default', 'az', 'priority', 'quota'] as const;
 
 export type AuthFilesSortMode = (typeof AUTH_FILES_SORT_MODES)[number];
 
 export type AuthFilesUiState = {
   filter?: string;
-  accountFilter?: string;
   messageFilter?: string;
   messageQuickFilter?: string;
   problemOnly?: boolean;
