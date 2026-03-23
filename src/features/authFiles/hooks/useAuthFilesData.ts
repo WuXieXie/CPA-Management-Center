@@ -564,8 +564,10 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
           'warning'
         );
       }
+
+      deselectAll();
     },
-    [showNotification, t]
+    [deselectAll, showNotification, t]
   );
 
   const batchDelete = useCallback(
@@ -628,10 +630,12 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
               'warning'
             );
           }
+
+          deselectAll();
         },
       });
     },
-    [showConfirmation, showNotification, t]
+    [deselectAll, showConfirmation, showNotification, t]
   );
 
   return {

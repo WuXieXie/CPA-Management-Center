@@ -817,9 +817,10 @@ export function AuthFilesPage() {
         );
       }
     } finally {
+      deselectAll();
       setBatchQuotaRefreshing(false);
     }
-  }, [batchQuotaRefreshing, files, resolveQuotaConfigForFile, selectedNames, showNotification, t]);
+  }, [batchQuotaRefreshing, deselectAll, files, resolveQuotaConfigForFile, selectedNames, showNotification, t]);
 
   const copyTextWithNotification = useCallback(
     async (text: string) => {

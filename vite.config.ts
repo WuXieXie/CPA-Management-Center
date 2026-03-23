@@ -5,28 +5,52 @@ import path from 'path';
 import { execSync } from 'child_process';
 import fs from 'fs';
 
+function normalizeVersionToken(value: string): string {
+  return value.trim().replace(/^['"]+|['"]+$/g, '');
+}
+
+function readGitTag(): string {
+  const commands = ['git describe --tags --exact-match', 'git describe --tags'];
+
+  for (const command of commands) {
+    try {
+      const output = execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+      const normalized = normalizeVersionToken(output);
+      if (normalized) {
+        return normalized;
+      }
+    } catch {
+      // try next command
+    }
+  }
+
+  return '';
+}
+
 // Get version from environment, git tag, or package.json
 function getVersion(): string {
   // 1. Environment variable (set by GitHub Actions)
   if (process.env.VERSION) {
-    return process.env.VERSION;
+    const version = normalizeVersionToken(process.env.VERSION);
+    if (version) {
+      return version;
+    }
   }
 
   // 2. Try git tag
-  try {
-    const gitTag = execSync('git describe --tags --exact-match 2>/dev/null || git describe --tags 2>/dev/null || echo ""', { encoding: 'utf8' }).trim();
-    if (gitTag) {
-      return gitTag;
-    }
-  } catch {
-    // Git not available or no tags
+  const gitTag = readGitTag();
+  if (gitTag) {
+    return gitTag;
   }
 
   // 3. Fall back to package.json version
   try {
     const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'));
     if (pkg.version && pkg.version !== '0.0.0') {
-      return pkg.version;
+      const version = normalizeVersionToken(String(pkg.version));
+      if (version) {
+        return version;
+      }
     }
   } catch {
     // package.json not readable
