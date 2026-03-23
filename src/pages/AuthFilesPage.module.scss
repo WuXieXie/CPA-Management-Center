@@ -390,7 +390,10 @@
 
 .filterControls {
   display: grid;
-  grid-template-columns: minmax(240px, 1.4fr) repeat(2, minmax(120px, 0.72fr)) minmax(220px, auto);
+  grid-template-columns:
+    repeat(2, minmax(220px, 1.1fr))
+    repeat(3, minmax(120px, 0.7fr))
+    minmax(220px, auto);
   gap: $spacing-md;
   align-items: flex-end;
 
@@ -405,12 +408,52 @@
   }
 
   @include tablet {
-    grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(140px, 0.8fr));
+    grid-template-columns: repeat(2, minmax(180px, 1fr));
   }
 
   @include mobile {
     grid-template-columns: 1fr;
   }
+}
+
+.messageQuickFilters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.messageQuickFilter {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color $transition-fast,
+    background-color $transition-fast,
+    color $transition-fast,
+    transform $transition-fast;
+
+  &:hover {
+    color: var(--text-primary);
+    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--border-color));
+    transform: translateY(-1px);
+  }
+}
+
+.messageQuickFilterActive {
+  background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--primary-color) 48%, var(--border-color));
+  color: var(--text-primary);
+  box-shadow: 0 8px 20px -18px color-mix(in srgb, var(--primary-color) 60%, transparent);
 }
 
 .filterItem {
@@ -492,11 +535,11 @@
 // 卡片网格
 .fileGrid {
   display: grid;
-  gap: $spacing-md;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 
   @include tablet {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   @include mobile {
@@ -505,7 +548,7 @@
 }
 
 .fileGridQuotaManaged {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 
   @include tablet {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -517,10 +560,10 @@
 }
 
 .fileGridCompact {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 
   @include tablet {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   @include mobile {
@@ -974,8 +1017,8 @@
   overflow: hidden;
   background-color: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 18px;
+  border-radius: 14px;
+  padding: 13px;
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -1013,15 +1056,15 @@
 }
 
 .fileCardCompact {
-  padding: 14px;
-  border-radius: 14px;
+  padding: 10px;
+  border-radius: 12px;
 
   .fileCardMain {
-    gap: 10px;
+    gap: 8px;
   }
 
   .cardHeader {
-    gap: 10px;
+    gap: 8px;
   }
 
   .cardSelection {
@@ -1029,14 +1072,14 @@
   }
 
   .providerAvatar {
-    width: 38px;
-    height: 38px;
+    width: 34px;
+    height: 34px;
     border-radius: 12px;
   }
 
   .providerAvatarImage {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
   }
 
   .providerAvatarFallback {
@@ -1044,7 +1087,7 @@
   }
 
   .cardHeaderContent {
-    gap: 4px;
+    gap: 3px;
   }
 
   .cardBadgeRow {
@@ -1063,7 +1106,7 @@
   }
 
   .healthStatusMessage {
-    padding: 8px 10px;
+    padding: 6px 8px;
     border-radius: 10px;
     font-size: 11px;
   }
@@ -1124,7 +1167,7 @@
 .fileCardMain {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   flex: 1;
   min-width: 0;
 }
@@ -1132,7 +1175,7 @@
 .cardHeader {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 9px;
 }
 
 .cardSelection {
@@ -1141,25 +1184,25 @@
 }
 
 .providerAvatar {
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 14px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border-color) 74%, transparent);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 55%, transparent);
 }
 
 .providerAvatarImage {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   object-fit: contain;
 }
 
 .providerAvatarFallback {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1;
 }
@@ -1167,7 +1210,7 @@
 .cardHeaderContent {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
@@ -1176,13 +1219,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
 }
 
 .typeBadge {
   display: inline-flex;
   align-items: center;
-  padding: 5px 10px;
+  padding: 4px 9px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
@@ -1195,7 +1238,7 @@
 .stateBadge {
   display: inline-flex;
   align-items: center;
-  padding: 5px 10px;
+  padding: 4px 9px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
@@ -1229,14 +1272,14 @@
 }
 
 .fileName {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
   word-break: break-all;
-  line-height: 1.45;
+  line-height: 1.35;
   display: -webkit-box;
   overflow: hidden;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
 }
 
@@ -1279,10 +1322,10 @@
 .metaItem {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 8px 9px;
+  border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
   background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
 }
@@ -1341,13 +1384,13 @@
 .healthStatusMessage {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   font-size: 12px;
   color: var(--warning-text);
   background-color: var(--warning-bg);
   border: 1px solid var(--warning-border);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 8px 9px;
   word-break: break-word;
 }
 
@@ -1359,9 +1402,9 @@
 .cardInsights {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 16px;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
   border: 1px solid color-mix(in srgb, var(--border-color) 82%, transparent);
   background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
 }
@@ -1375,7 +1418,7 @@
 .cardStats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 
   @include mobile {
     grid-template-columns: 1fr;
@@ -1405,10 +1448,10 @@
 .statPill {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  padding: 12px;
-  border-radius: 12px;
+  padding: 8px;
+  border-radius: 10px;
   border: 1px solid transparent;
 }
 
@@ -1419,7 +1462,7 @@
 }
 
 .statValue {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1440,7 +1483,7 @@
 .statusPanel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .statusPanelCompact {
@@ -1484,7 +1527,7 @@
 .statusBar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
   padding: 0;
@@ -1514,7 +1557,7 @@
 
 .statusBlock {
   width: 100%;
-  height: 10px;
+  height: 8px;
   border-radius: 999px;
   transition:
     transform 0.15s ease,

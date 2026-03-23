@@ -142,8 +142,117 @@ export const getAuthFileStatusMessage = (file: AuthFileItem): string => {
   return String(raw).trim();
 };
 
+export const getAuthFileMessageText = (file: AuthFileItem): string => {
+  const values = [
+    file.message,
+    file['message'],
+    file.status_message,
+    file.statusMessage,
+  ];
+
+  for (const raw of values) {
+    if (typeof raw === 'string' && raw.trim()) return raw.trim();
+    if (raw != null) {
+      const text = String(raw).trim();
+      if (text) return text;
+    }
+  }
+
+  return '';
+};
+
+const ACCOUNT_FIELD_NAMES = [
+  'account',
+  'email',
+  'mail',
+  'user',
+  'username',
+  'login',
+  'display_name',
+  'displayName',
+  'full_name',
+  'fullName',
+  'message',
+  'status_message',
+  'statusMessage',
+] as const;
+
+const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+const ACCOUNT_VALUE_PATTERN =
+  /\b(?:account|acct|user|username|login|email|mail|name)\s*[:=]\s*("?)([^",;\n]+)\1/gi;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const normalizeAccountValue = (value: string): string | null => {
+  const trimmed = value.trim().replace(/^["']+|["']+$/g, '');
+  if (!trimmed) return null;
+  if (trimmed.length > 120) return null;
+  return trimmed.toLowerCase();
+};
+
+const addAccountCandidate = (bucket: Set<string>, raw: string) => {
+  const normalized = normalizeAccountValue(raw);
+  if (!normalized) return;
+  bucket.add(normalized);
+};
+
+const collectAccountCandidatesFromString = (value: string, bucket: Set<string>) => {
+  const matches = value.match(EMAIL_PATTERN);
+  if (matches) {
+    matches.forEach((match) => addAccountCandidate(bucket, match));
+  }
+
+  let accountMatch: RegExpExecArray | null;
+  ACCOUNT_VALUE_PATTERN.lastIndex = 0;
+  while ((accountMatch = ACCOUNT_VALUE_PATTERN.exec(value)) !== null) {
+    addAccountCandidate(bucket, accountMatch[2] || '');
+  }
+};
+
+const collectAccountCandidates = (
+  value: unknown,
+  bucket: Set<string>,
+  depth = 0
+) => {
+  if (depth > 2 || value == null) return;
+
+  if (typeof value === 'string') {
+    collectAccountCandidatesFromString(value, bucket);
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectAccountCandidates(entry, bucket, depth + 1));
+    return;
+  }
+
+  if (!isRecord(value)) return;
+
+  ACCOUNT_FIELD_NAMES.forEach((field) => {
+    if (field in value) {
+      collectAccountCandidates(value[field], bucket, depth + 1);
+    }
+  });
+};
+
+export const resolveAuthFileAccountCandidates = (file: AuthFileItem): string[] => {
+  const bucket = new Set<string>();
+
+  ACCOUNT_FIELD_NAMES.forEach((field) => {
+    if (field in file) {
+      collectAccountCandidates(file[field], bucket);
+    }
+  });
+
+  collectAccountCandidates(file.metadata, bucket);
+  collectAccountCandidates(file.attributes, bucket);
+
+  return Array.from(bucket).sort((a, b) => a.localeCompare(b));
+};
+
 export const hasAuthFileStatusMessage = (file: AuthFileItem): boolean =>
-  getAuthFileStatusMessage(file).length > 0;
+  getAuthFileMessageText(file).length > 0;
 
 export const getTypeLabel = (t: TFunction, type: string): string => {
   const key = `auth_files.filter_${type}`;
