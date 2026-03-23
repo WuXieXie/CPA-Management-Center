@@ -87,12 +87,23 @@ const AUTH_FILES_MAX_COMPACT_PAGE_SIZE = 15;
 const AUTH_FILES_MOBILE_BREAKPOINT = 768;
 const AUTH_FILES_TABLET_BREAKPOINT = 1200;
 type MessageQuickFilter = 'all' | 'usage_limit_reached' | 'invalidated' | 'timeout';
+type EnabledStatusFilter = 'all' | 'enabled' | 'disabled';
 
 const MESSAGE_QUICK_FILTER_MATCHERS: Record<Exclude<MessageQuickFilter, 'all'>, string[]> = {
   usage_limit_reached: ['usage_limit_reached'],
   invalidated: ['your authentication token has been invalidated', 'invalidated'],
   timeout: ['timeout', 'timed out'],
 };
+
+const matchesMessageQuickFilter = (
+  quickFilter: MessageQuickFilter,
+  messageText: string,
+  quotaText: string
+) =>
+  quickFilter === 'all' ||
+  MESSAGE_QUICK_FILTER_MATCHERS[quickFilter].some(
+    (token) => messageText.includes(token) || quotaText.includes(token)
+  );
 
 type RefreshableQuotaConfig = {
   fetchQuota: (file: AuthFileItem, t: ReturnType<typeof useTranslation>['t']) => Promise<any>;
@@ -375,6 +386,7 @@ export function AuthFilesPage() {
   const navigate = useNavigate();
 
   const [filter, setFilter] = useState<'all' | string>('all');
+  const [enabledStatusFilter, setEnabledStatusFilter] = useState<EnabledStatusFilter>('all');
   const [messageFilter, setMessageFilter] = useState('');
   const [messageQuickFilter, setMessageQuickFilter] = useState<MessageQuickFilter>('all');
   const [problemOnly, setProblemOnly] = useState(false);
@@ -484,6 +496,13 @@ export function AuthFilesPage() {
     if (typeof persisted.filter === 'string' && persisted.filter.trim()) {
       setFilter(persisted.filter);
     }
+    if (
+      persisted.enabledStatusFilter === 'all' ||
+      persisted.enabledStatusFilter === 'enabled' ||
+      persisted.enabledStatusFilter === 'disabled'
+    ) {
+      setEnabledStatusFilter(persisted.enabledStatusFilter);
+    }
     if (typeof persisted.messageFilter === 'string') {
       setMessageFilter(persisted.messageFilter);
     }
@@ -531,6 +550,7 @@ export function AuthFilesPage() {
   useEffect(() => {
     writeAuthFilesUiState({
       filter,
+      enabledStatusFilter,
       messageFilter,
       messageQuickFilter,
       problemOnly,
@@ -544,6 +564,7 @@ export function AuthFilesPage() {
     });
   }, [
     filter,
+    enabledStatusFilter,
     messageFilter,
     messageQuickFilter,
     problemOnly,
@@ -724,19 +745,17 @@ export function AuthFilesPage() {
     return entries;
   }, [files, antigravityQuota, claudeQuota, codexQuota, geminiCliQuota, kimiQuota, t]);
 
-  const filtered = useMemo(() => {
+  const filteredWithoutQuickMessage = useMemo(() => {
     return filesMatchingProblemFilter.filter((item) => {
       const matchType = filter === 'all' || item.type === filter;
+      const matchEnabledStatus =
+        enabledStatusFilter === 'all' ||
+        (enabledStatusFilter === 'enabled' ? item.disabled !== true : item.disabled === true);
       const accountCandidates = resolveAuthFileAccountCandidates(item);
       const messageText = getAuthFileMessageText(item).toLowerCase();
       const quotaText = quotaSearchTexts.get(item.name) ?? '';
       const messageTerm = messageFilter.trim().toLowerCase();
       const matchMessage = !messageTerm || messageText.includes(messageTerm) || quotaText.includes(messageTerm);
-      const matchQuickMessage =
-        messageQuickFilter === 'all' ||
-        MESSAGE_QUICK_FILTER_MATCHERS[messageQuickFilter].some(
-          (token) => messageText.includes(token) || quotaText.includes(token)
-        );
       const term = search.trim().toLowerCase();
       const accountSearchText = accountCandidates.join(' ');
       const matchSearch =
@@ -747,9 +766,51 @@ export function AuthFilesPage() {
         messageText.includes(term) ||
         accountSearchText.includes(term) ||
         quotaText.includes(term);
-      return matchType && matchMessage && matchQuickMessage && matchSearch;
+      return matchType && matchEnabledStatus && matchMessage && matchSearch;
     });
-  }, [filesMatchingProblemFilter, filter, messageFilter, messageQuickFilter, search, quotaSearchTexts]);
+  }, [
+    filesMatchingProblemFilter,
+    filter,
+    enabledStatusFilter,
+    messageFilter,
+    search,
+    quotaSearchTexts,
+  ]);
+
+  const messageQuickFilterCounts = useMemo(() => {
+    const counts: Record<MessageQuickFilter, number> = {
+      all: filteredWithoutQuickMessage.length,
+      usage_limit_reached: 0,
+      invalidated: 0,
+      timeout: 0,
+    };
+
+    filteredWithoutQuickMessage.forEach((item) => {
+      const messageText = getAuthFileMessageText(item).toLowerCase();
+      const quotaText = quotaSearchTexts.get(item.name) ?? '';
+      if (matchesMessageQuickFilter('usage_limit_reached', messageText, quotaText)) {
+        counts.usage_limit_reached += 1;
+      }
+      if (matchesMessageQuickFilter('invalidated', messageText, quotaText)) {
+        counts.invalidated += 1;
+      }
+      if (matchesMessageQuickFilter('timeout', messageText, quotaText)) {
+        counts.timeout += 1;
+      }
+    });
+
+    return counts;
+  }, [filteredWithoutQuickMessage, quotaSearchTexts]);
+
+  const filtered = useMemo(
+    () =>
+      filteredWithoutQuickMessage.filter((item) => {
+        const messageText = getAuthFileMessageText(item).toLowerCase();
+        const quotaText = quotaSearchTexts.get(item.name) ?? '';
+        return matchesMessageQuickFilter(messageQuickFilter, messageText, quotaText);
+      }),
+    [filteredWithoutQuickMessage, messageQuickFilter, quotaSearchTexts]
+  );
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -1290,153 +1351,223 @@ export function AuthFilesPage() {
           <div className={styles.filterContent}>
             <div className={styles.filterControlsPanel}>
               <div className={styles.filterControls}>
-                <div className={styles.filterItem}>
-                  <label>{t('auth_files.search_label')}</label>
-                  <Input
-                    value={search}
-                    onChange={(e) => {
-                      setSearch(e.target.value);
-                      setPage(1);
-                    }}
-                    placeholder={t('auth_files.search_placeholder')}
-                  />
-                </div>
-                <div className={styles.filterItem}>
-                  <label>
-                    {t('auth_files.message_filter_label', { defaultValue: 'Message 筛选' })}
-                  </label>
-                  <Input
-                    value={messageFilter}
-                    onChange={(e) => {
-                      setMessageFilter(e.target.value);
-                      setPage(1);
-                    }}
-                    placeholder={t('auth_files.message_filter_placeholder', {
-                      defaultValue: '按 message / status_message 筛选',
-                    })}
-                  />
-                </div>
-                <div className={styles.filterItem}>
-                  <label>{t('auth_files.page_size_label')}</label>
-                    <input
-                      className={styles.pageSizeSelect}
-                      type="number"
-                      min={MIN_CARD_PAGE_SIZE}
-                      max={getAuthFilesMaxPageSize(compactMode)}
-                    step={1}
-                    value={pageSizeInput}
-                    onChange={handlePageSizeChange}
-                    onBlur={(e) => commitPageSizeInput(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.currentTarget.blur();
-                      }
-                    }}
-                  />
-                </div>
-                <div className={styles.filterItem}>
-                  <label>{t('auth_files.sort_label')}</label>
-                  <Select
-                    className={styles.sortSelect}
-                    value={sortMode}
-                    options={sortOptions}
-                    onChange={handleSortModeChange}
-                    ariaLabel={t('auth_files.sort_label')}
-                    fullWidth
-                  />
-                </div>
-                <div className={`${styles.filterItem} ${styles.filterToggleItem}`}>
-                  <label>{t('auth_files.display_options_label')}</label>
-                  <div className={styles.filterToggleGroup}>
-                    <div className={styles.filterToggleCard}>
-                      <ToggleSwitch
-                        checked={problemOnly}
-                        onChange={(value) => {
-                          setProblemOnly(value);
+                <div className={styles.filterControlsColumn}>
+                  <div className={styles.filterControlsMain}>
+                    <div className={`${styles.filterItem} ${styles.searchFilterItem}`}>
+                      <label>{t('auth_files.search_label')}</label>
+                      <Input
+                        value={search}
+                        onChange={(e) => {
+                          setSearch(e.target.value);
                           setPage(1);
                         }}
-                        ariaLabel={t('auth_files.problem_filter_only')}
-                        label={
-                          <span className={styles.filterToggleLabel}>
-                            {t('auth_files.problem_filter_only')}
-                          </span>
-                        }
+                        placeholder={t('auth_files.search_placeholder')}
                       />
                     </div>
-                    <div className={styles.filterToggleCard}>
-                      <ToggleSwitch
-                        checked={compactMode}
-                        onChange={(value) => setCompactMode(value)}
-                        ariaLabel={t('auth_files.compact_mode_label')}
-                        label={
-                          <span className={styles.filterToggleLabel}>
-                            {t('auth_files.compact_mode_label')}
-                          </span>
-                        }
+                    <div className={`${styles.filterItem} ${styles.messageFilterItem}`}>
+                      <label>
+                        {t('auth_files.message_filter_label', { defaultValue: 'Message 筛选' })}
+                      </label>
+                      <Input
+                        value={messageFilter}
+                        onChange={(e) => {
+                          setMessageFilter(e.target.value);
+                          setPage(1);
+                        }}
+                        placeholder={t('auth_files.message_filter_placeholder', {
+                          defaultValue: '按 message / status_message 筛选',
+                        })}
+                      />
+                    </div>
+                    <div className={`${styles.filterItem} ${styles.pageSizeFilterItem}`}>
+                      <label>{t('auth_files.page_size_label')}</label>
+                      <input
+                        className={styles.pageSizeSelect}
+                        type="number"
+                        min={MIN_CARD_PAGE_SIZE}
+                        max={getAuthFilesMaxPageSize(compactMode)}
+                        step={1}
+                        value={pageSizeInput}
+                        onChange={handlePageSizeChange}
+                        onBlur={(e) => commitPageSizeInput(e.currentTarget.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.currentTarget.blur();
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className={`${styles.filterItem} ${styles.sortFilterItem}`}>
+                      <label>{t('auth_files.sort_label')}</label>
+                      <Select
+                        className={styles.sortSelect}
+                        value={sortMode}
+                        options={sortOptions}
+                        onChange={handleSortModeChange}
+                        ariaLabel={t('auth_files.sort_label')}
+                        fullWidth
+                      />
+                    </div>
+                    <div className={`${styles.filterItem} ${styles.enabledStatusFilterItem}`}>
+                      <label>
+                        {t('auth_files.enabled_status_filter_label', {
+                          defaultValue: '账号启用状态',
+                        })}
+                      </label>
+                      <Select
+                        value={enabledStatusFilter}
+                        options={[
+                          {
+                            value: 'all',
+                            label: t('auth_files.enabled_status_filter_all', {
+                              defaultValue: '全部状态',
+                            }),
+                          },
+                          {
+                            value: 'enabled',
+                            label: t('auth_files.enabled_status_filter_enabled', {
+                              defaultValue: '仅启用',
+                            }),
+                          },
+                          {
+                            value: 'disabled',
+                            label: t('auth_files.enabled_status_filter_disabled', {
+                              defaultValue: '仅禁用',
+                            }),
+                          },
+                        ]}
+                        onChange={(value) => {
+                          setEnabledStatusFilter(value as EnabledStatusFilter);
+                          setPage(1);
+                        }}
+                        ariaLabel={t('auth_files.enabled_status_filter_label', {
+                          defaultValue: '账号启用状态',
+                        })}
+                        fullWidth
                       />
                     </div>
                   </div>
+                  <div className={styles.messageQuickFiltersSection}>
+                    <div className={styles.messageQuickFiltersMeta}>
+                      {t('auth_files.filtered_count_label', {
+                        count: filtered.length,
+                        defaultValue: `筛选结果 ${filtered.length}`,
+                      })}
+                    </div>
+                    <div className={styles.messageQuickFilters}>
+                      <button
+                        type="button"
+                        className={`${styles.messageQuickFilter} ${
+                          messageQuickFilter === 'all' ? styles.messageQuickFilterActive : ''
+                        }`}
+                        onClick={() => {
+                          setMessageQuickFilter('all');
+                          setPage(1);
+                        }}
+                      >
+                        <span>{t('auth_files.message_quick_all', { defaultValue: '全部消息' })}</span>
+                        <span className={styles.messageQuickFilterCount}>
+                          {messageQuickFilterCounts.all}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.messageQuickFilter} ${
+                          messageQuickFilter === 'usage_limit_reached'
+                            ? styles.messageQuickFilterActive
+                            : ''
+                        }`}
+                        onClick={() => {
+                          setMessageQuickFilter('usage_limit_reached');
+                          setPage(1);
+                        }}
+                      >
+                        <span>
+                          {t('auth_files.message_quick_usage_limit_reached', {
+                            defaultValue: 'usage_limit_reached',
+                          })}
+                        </span>
+                        <span className={styles.messageQuickFilterCount}>
+                          {messageQuickFilterCounts.usage_limit_reached}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.messageQuickFilter} ${
+                          messageQuickFilter === 'invalidated'
+                            ? styles.messageQuickFilterActive
+                            : ''
+                        }`}
+                        onClick={() => {
+                          setMessageQuickFilter('invalidated');
+                          setPage(1);
+                        }}
+                      >
+                        <span>
+                          {t('auth_files.message_quick_invalidated', {
+                            defaultValue: 'invalidated',
+                          })}
+                        </span>
+                        <span className={styles.messageQuickFilterCount}>
+                          {messageQuickFilterCounts.invalidated}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.messageQuickFilter} ${
+                          messageQuickFilter === 'timeout' ? styles.messageQuickFilterActive : ''
+                        }`}
+                        onClick={() => {
+                          setMessageQuickFilter('timeout');
+                          setPage(1);
+                        }}
+                      >
+                        <span>
+                          {t('auth_files.message_quick_timeout', {
+                            defaultValue: 'timeout',
+                          })}
+                        </span>
+                        <span className={styles.messageQuickFilterCount}>
+                          {messageQuickFilterCounts.timeout}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className={styles.messageQuickFilters}>
-                <button
-                  type="button"
-                  className={`${styles.messageQuickFilter} ${
-                    messageQuickFilter === 'all' ? styles.messageQuickFilterActive : ''
-                  }`}
-                  onClick={() => {
-                    setMessageQuickFilter('all');
-                    setPage(1);
-                  }}
-                >
-                  {t('auth_files.message_quick_all', { defaultValue: '全部消息' })}
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.messageQuickFilter} ${
-                    messageQuickFilter === 'usage_limit_reached'
-                      ? styles.messageQuickFilterActive
-                      : ''
-                  }`}
-                  onClick={() => {
-                    setMessageQuickFilter('usage_limit_reached');
-                    setPage(1);
-                  }}
-                >
-                  {t('auth_files.message_quick_usage_limit_reached', {
-                    defaultValue: 'usage_limit_reached',
-                  })}
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.messageQuickFilter} ${
-                    messageQuickFilter === 'invalidated'
-                      ? styles.messageQuickFilterActive
-                      : ''
-                  }`}
-                  onClick={() => {
-                    setMessageQuickFilter('invalidated');
-                    setPage(1);
-                  }}
-                >
-                  {t('auth_files.message_quick_invalidated', {
-                    defaultValue: 'invalidated',
-                  })}
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.messageQuickFilter} ${
-                    messageQuickFilter === 'timeout' ? styles.messageQuickFilterActive : ''
-                  }`}
-                  onClick={() => {
-                    setMessageQuickFilter('timeout');
-                    setPage(1);
-                  }}
-                >
-                  {t('auth_files.message_quick_timeout', {
-                    defaultValue: 'timeout',
-                  })}
-                </button>
+                <div className={styles.filterControlsAside}>
+                  <div className={`${styles.filterItem} ${styles.filterToggleItem}`}>
+                    <label>{t('auth_files.display_options_label')}</label>
+                    <div className={styles.filterToggleGroup}>
+                      <div className={styles.filterToggleCard}>
+                        <ToggleSwitch
+                          checked={problemOnly}
+                          onChange={(value) => {
+                            setProblemOnly(value);
+                            setPage(1);
+                          }}
+                          ariaLabel={t('auth_files.problem_filter_only')}
+                          label={
+                            <span className={styles.filterToggleLabel}>
+                              {t('auth_files.problem_filter_only')}
+                            </span>
+                          }
+                        />
+                      </div>
+                      <div className={styles.filterToggleCard}>
+                        <ToggleSwitch
+                          checked={compactMode}
+                          onChange={(value) => setCompactMode(value)}
+                          ariaLabel={t('auth_files.compact_mode_label')}
+                          label={
+                            <span className={styles.filterToggleLabel}>
+                              {t('auth_files.compact_mode_label')}
+                            </span>
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 

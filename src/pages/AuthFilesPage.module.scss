@@ -389,13 +389,10 @@
 }
 
 .filterControls {
-  display: grid;
-  grid-template-columns:
-    repeat(2, minmax(220px, 1.1fr))
-    repeat(3, minmax(120px, 0.7fr))
-    minmax(220px, auto);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: $spacing-md;
-  align-items: flex-end;
 
   // 修复 Input 组件在 filterItem 中的嵌套样式
   :global(.form-group) {
@@ -408,12 +405,70 @@
   }
 
   @include tablet {
-    grid-template-columns: repeat(2, minmax(180px, 1fr));
+    flex-direction: column;
+    align-items: stretch;
   }
+}
+
+.filterControlsMain {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: $spacing-md;
+  align-items: flex-end;
 
   @include mobile {
+    display: grid;
     grid-template-columns: 1fr;
   }
+}
+
+.filterControlsColumn {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.filterControlsAside {
+  flex: 0 0 auto;
+  width: 220px;
+
+  @include tablet {
+    width: 100%;
+  }
+}
+
+.searchFilterItem {
+  flex: 1 1 30ch;
+  min-width: 320px;
+  max-width: 360px;
+}
+
+.messageFilterItem {
+  flex: 1 1 30ch;
+  min-width: 320px;
+  max-width: 360px;
+}
+
+.pageSizeFilterItem {
+  flex: 0 1 10ch;
+  min-width: 112px;
+  max-width: 132px;
+}
+
+.sortFilterItem {
+  flex: 0 1 14ch;
+  min-width: 132px;
+  max-width: 156px;
+}
+
+.enabledStatusFilterItem {
+  flex: 0 1 15ch;
+  min-width: 136px;
+  max-width: 164px;
 }
 
 .messageQuickFilters {
@@ -421,12 +476,24 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 12px;
+}
+
+.messageQuickFiltersSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.messageQuickFiltersMeta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .messageQuickFilter {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
   min-height: 32px;
   padding: 0 12px;
   border-radius: 999px;
@@ -449,11 +516,31 @@
   }
 }
 
+.messageQuickFilterCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border-color) 55%, transparent);
+  color: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 .messageQuickFilterActive {
   background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-secondary));
   border-color: color-mix(in srgb, var(--primary-color) 48%, var(--border-color));
   color: var(--text-primary);
   box-shadow: 0 8px 20px -18px color-mix(in srgb, var(--primary-color) 60%, transparent);
+}
+
+.messageQuickFilterActive .messageQuickFilterCount {
+  background: color-mix(in srgb, var(--primary-color) 24%, transparent);
 }
 
 .filterItem {
@@ -474,11 +561,7 @@
 
 .filterToggleItem {
   min-width: 0;
-  grid-column: -2 / -1;
-
-  @include tablet {
-    grid-column: 1 / -1;
-  }
+  width: 100%;
 }
 
 .filterToggleGroup {

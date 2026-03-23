@@ -494,7 +494,7 @@
     "search_label": "搜索配置文件",
     "search_placeholder": "输入名称、类型或提供方关键字",
     "problem_filter_label": "问题筛选",
-    "problem_filter_only": "仅显示有问题凭证",
+    "problem_filter_only": "仅显示问题凭证",
     "display_options_label": "显示选项",
     "compact_mode_label": "简略模式",
     "sort_label": "排序",
