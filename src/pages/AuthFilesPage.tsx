@@ -86,13 +86,14 @@ const AUTH_FILES_MAX_REGULAR_PAGE_SIZE = 12;
 const AUTH_FILES_MAX_COMPACT_PAGE_SIZE = 15;
 const AUTH_FILES_MOBILE_BREAKPOINT = 768;
 const AUTH_FILES_TABLET_BREAKPOINT = 1200;
-type MessageQuickFilter = 'all' | 'usage_limit_reached' | 'invalidated' | 'timeout';
+type MessageQuickFilter = 'all' | 'usage_limit_reached' | 'invalidated' | 'timeout' | 'expired';
 type EnabledStatusFilter = 'all' | 'enabled' | 'disabled';
 
 const MESSAGE_QUICK_FILTER_MATCHERS: Record<Exclude<MessageQuickFilter, 'all'>, string[]> = {
   usage_limit_reached: ['usage_limit_reached'],
   invalidated: ['your authentication token has been invalidated', 'invalidated'],
   timeout: ['timeout', 'timed out'],
+  expired: ['expired', 'has expired', 'token expired', 'token is expired'],
 };
 
 const matchesMessageQuickFilter = (
@@ -510,7 +511,8 @@ export function AuthFilesPage() {
       persisted.messageQuickFilter === 'all' ||
       persisted.messageQuickFilter === 'usage_limit_reached' ||
       persisted.messageQuickFilter === 'invalidated' ||
-      persisted.messageQuickFilter === 'timeout'
+      persisted.messageQuickFilter === 'timeout' ||
+      persisted.messageQuickFilter === 'expired'
     ) {
       setMessageQuickFilter(persisted.messageQuickFilter);
     }
@@ -783,6 +785,7 @@ export function AuthFilesPage() {
       usage_limit_reached: 0,
       invalidated: 0,
       timeout: 0,
+      expired: 0,
     };
 
     filteredWithoutQuickMessage.forEach((item) => {
@@ -796,6 +799,9 @@ export function AuthFilesPage() {
       }
       if (matchesMessageQuickFilter('timeout', messageText, quotaText)) {
         counts.timeout += 1;
+      }
+      if (matchesMessageQuickFilter('expired', messageText, quotaText)) {
+        counts.expired += 1;
       }
     });
 
@@ -1529,6 +1535,25 @@ export function AuthFilesPage() {
                         </span>
                         <span className={styles.messageQuickFilterCount}>
                           {messageQuickFilterCounts.timeout}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`${styles.messageQuickFilter} ${
+                          messageQuickFilter === 'expired' ? styles.messageQuickFilterActive : ''
+                        }`}
+                        onClick={() => {
+                          setMessageQuickFilter('expired');
+                          setPage(1);
+                        }}
+                      >
+                        <span>
+                          {t('auth_files.message_quick_expired', {
+                            defaultValue: 'expired',
+                          })}
+                        </span>
+                        <span className={styles.messageQuickFilterCount}>
+                          {messageQuickFilterCounts.expired}
                         </span>
                       </button>
                     </div>
