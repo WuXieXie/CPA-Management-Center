@@ -223,6 +223,31 @@ const buildQuotaStateSearchText = (
     .toLowerCase();
 };
 
+const hasVisibleQuotaContent = (
+  quota:
+    | AntigravityQuotaState
+    | ClaudeQuotaState
+    | CodexQuotaState
+    | GeminiCliQuotaState
+    | KimiQuotaState
+    | undefined
+) => {
+  if (!quota || quota.status === 'idle' || quota.status === 'loading') return false;
+  if (quota.status === 'error') return true;
+  if ('groups' in quota) return quota.groups.length > 0;
+  if ('windows' in quota) return quota.windows.length > 0 || Boolean(quota.planType) || Boolean('extraUsage' in quota && quota.extraUsage?.is_enabled);
+  if ('buckets' in quota) {
+    return (
+      quota.buckets.length > 0 ||
+      Boolean(quota.tierLabel) ||
+      Boolean(quota.tierId) ||
+      quota.creditBalance !== null
+    );
+  }
+  if ('rows' in quota) return quota.rows.length > 0;
+  return false;
+};
+
 const clampAuthFilesPageSize = (value: number) =>
   Math.min(AUTH_FILES_MAX_PAGE_SIZE, clampCardPageSize(value));
 
@@ -713,6 +738,30 @@ export function AuthFilesPage() {
   const allFilteredSelected =
     selectableFilteredItems.length > 0 &&
     selectableFilteredItems.every((file) => selectedFiles.has(file.name));
+  const emptyQuotaSelectableItems = useMemo(
+    () =>
+      sorted.filter((file) => {
+        if (isRuntimeOnlyAuthFile(file) || file.disabled) return false;
+        const config = resolveQuotaConfigForFile(file);
+        if (!config) return false;
+        return !(
+          hasVisibleQuotaContent(antigravityQuota[file.name]) ||
+          hasVisibleQuotaContent(claudeQuota[file.name]) ||
+          hasVisibleQuotaContent(codexQuota[file.name]) ||
+          hasVisibleQuotaContent(geminiCliQuota[file.name]) ||
+          hasVisibleQuotaContent(kimiQuota[file.name])
+        );
+      }),
+    [
+      sorted,
+      resolveQuotaConfigForFile,
+      antigravityQuota,
+      claudeQuota,
+      codexQuota,
+      geminiCliQuota,
+      kimiQuota,
+    ]
+  );
   const selectedNames = useMemo(() => Array.from(selectedFiles), [selectedFiles]);
   const selectedHasStatusUpdating = useMemo(
     () => selectedNames.some((name) => statusUpdating[name] === true),
@@ -734,6 +783,19 @@ export function AuthFilesPage() {
     }
     selectAllVisible(selectableFilteredItems);
   }, [allFilteredSelected, deselectAll, selectAllVisible, selectableFilteredItems]);
+
+  const handleSelectEmptyQuotaItems = useCallback(() => {
+    if (emptyQuotaSelectableItems.length === 0) {
+      showNotification(
+        t('auth_files.batch_select_empty_quota_none', {
+          defaultValue: '当前筛选结果中没有空配额账号',
+        }),
+        'info'
+      );
+      return;
+    }
+    selectAllVisible(emptyQuotaSelectableItems);
+  }, [emptyQuotaSelectableItems, selectAllVisible, showNotification, t]);
 
   const handleRefreshSelectedQuota = useCallback(async () => {
     if (batchQuotaRefreshing) return;
@@ -1082,6 +1144,14 @@ export function AuthFilesPage() {
               {allFilteredSelected
                 ? t('auth_files.batch_deselect', { defaultValue: '取消选择' })
                 : t('auth_files.batch_select_all', { defaultValue: '全选当前筛选' })}
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSelectEmptyQuotaItems}
+              disabled={loading || emptyQuotaSelectableItems.length === 0}
+            >
+              {t('auth_files.batch_select_empty_quota', { defaultValue: '一键选中空配额' })}
             </Button>
             <Button
               variant="secondary"
