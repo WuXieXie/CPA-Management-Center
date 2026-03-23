@@ -8,6 +8,7 @@ import {
   GEMINI_CLI_CONFIG,
   KIMI_CONFIG
 } from '@/components/quota';
+import { IconRefreshCw } from '@/components/ui/icons';
 import { useNotificationStore, useQuotaStore } from '@/stores';
 import type { AuthFileItem } from '@/types';
 import { getStatusFromError } from '@/utils/quota';
@@ -106,9 +107,23 @@ export function AuthFileQuotaSection(props: AuthFileQuotaSectionProps) {
     quota?.errorStatus,
     quota?.error || t('common.unknown_error')
   );
+  const quotaHeaderLabel = t('auth_files.batch_quota_refresh', { defaultValue: '刷新配额' });
 
   return (
     <div className={styles.quotaSection}>
+      <button
+        type="button"
+        className={styles.quotaRefreshButton}
+        onClick={() => void refreshQuotaForFile()}
+        disabled={!canRefreshQuota || quotaStatus === 'loading'}
+        title={quotaHeaderLabel}
+        aria-label={quotaHeaderLabel}
+      >
+        <IconRefreshCw
+          size={13}
+          className={quotaStatus === 'loading' ? styles.quotaRefreshIconSpinning : undefined}
+        />
+      </button>
       {quotaStatus === 'loading' ? (
         <div className={styles.quotaMessage}>{t(`${config.i18nPrefix}.loading`)}</div>
       ) : quotaStatus === 'idle' ? (
