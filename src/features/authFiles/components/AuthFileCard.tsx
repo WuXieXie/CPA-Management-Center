@@ -88,8 +88,12 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const typeLabel = getTypeLabel(t, file.type || 'unknown');
   const providerIcon = getAuthFileIcon(file.type || 'unknown', resolvedTheme);
 
-  const quotaType =
-    quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
+  const resolvedQuotaType = resolveQuotaType(file);
+  const quotaType = quotaFilterType
+    ? resolvedQuotaType === quotaFilterType
+      ? resolvedQuotaType
+      : null
+    : resolvedQuotaType;
 
   const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
 
