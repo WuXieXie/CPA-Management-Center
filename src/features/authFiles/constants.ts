@@ -142,6 +142,25 @@ export const getAuthFileStatusMessage = (file: AuthFileItem): string => {
   return String(raw).trim();
 };
 
+export const getAuthFileStatusMessageDisplay = (file: AuthFileItem): string => {
+  const rawMessage = getAuthFileStatusMessage(file);
+  if (!rawMessage) return '';
+
+  try {
+    const parsed = JSON.parse(rawMessage) as {
+      error?: { type?: unknown };
+    };
+    const errorType = parsed?.error?.type;
+    if (typeof errorType === 'string' && errorType.trim()) {
+      return errorType.trim();
+    }
+  } catch {
+    // fall back to raw message when it is not JSON
+  }
+
+  return rawMessage;
+};
+
 export const getAuthFileMessageText = (file: AuthFileItem): string => {
   const values = [
     file.message,

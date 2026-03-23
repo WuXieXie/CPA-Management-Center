@@ -19,6 +19,7 @@ import {
   QUOTA_PROVIDER_TYPES,
   formatModified,
   getAuthFileIcon,
+  getAuthFileStatusMessageDisplay,
   getAuthFileStatusMessage,
   getTypeColor,
   getTypeLabel,
@@ -33,7 +34,6 @@ import { AuthFileQuotaSection } from '@/features/authFiles/components/AuthFileQu
 import styles from '@/pages/AuthFilesPage.module.scss';
 
 const HEALTHY_STATUS_MESSAGES = new Set(['ok', 'healthy', 'ready', 'success', 'available']);
-
 export type AuthFileCardProps = {
   file: AuthFileItem;
   compact: boolean;
@@ -95,8 +95,6 @@ export function AuthFileCard(props: AuthFileCardProps) {
       : null
     : resolvedQuotaType;
 
-  const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
-
   const providerCardClass =
     quotaType === 'antigravity'
       ? styles.antigravityCard
@@ -115,8 +113,10 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const statusData =
     (authIndexKey && statusBarCache.get(authIndexKey)) || calculateStatusBarData([]);
   const rawStatusMessage = getAuthFileStatusMessage(file);
+  const displayStatusMessage = getAuthFileStatusMessageDisplay(file);
   const hasStatusWarning =
     Boolean(rawStatusMessage) && !HEALTHY_STATUS_MESSAGES.has(rawStatusMessage.toLowerCase());
+  const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
 
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
@@ -218,10 +218,10 @@ export function AuthFileCard(props: AuthFileCardProps) {
             )}
           </div>
 
-          {rawStatusMessage && hasStatusWarning && (
+          {displayStatusMessage && hasStatusWarning && (
             <div className={styles.healthStatusMessage} title={rawStatusMessage}>
               <IconInfo className={styles.messageIcon} size={14} />
-              <span>{rawStatusMessage}</span>
+              <span>{displayStatusMessage}</span>
             </div>
           )}
 

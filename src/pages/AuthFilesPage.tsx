@@ -80,8 +80,8 @@ const easePower3Out = (progress: number) => 1 - (1 - progress) ** 4;
 const easePower2In = (progress: number) => progress ** 3;
 const BATCH_BAR_BASE_TRANSFORM = 'translateX(-50%)';
 const BATCH_BAR_HIDDEN_TRANSFORM = 'translateX(-50%) translateY(56px)';
-const DEFAULT_REGULAR_PAGE_SIZE = 9;
-const DEFAULT_COMPACT_PAGE_SIZE = 12;
+const DEFAULT_REGULAR_PAGE_SIZE = 12;
+const DEFAULT_COMPACT_PAGE_SIZE = 15;
 const AUTH_FILES_MAX_PAGE_SIZE = 16;
 const AUTH_FILES_MOBILE_BREAKPOINT = 768;
 const AUTH_FILES_TABLET_BREAKPOINT = 1200;
@@ -304,7 +304,7 @@ export function AuthFilesPage() {
     regular: DEFAULT_REGULAR_PAGE_SIZE,
     compact: DEFAULT_COMPACT_PAGE_SIZE,
   });
-  const [pageSizeInput, setPageSizeInput] = useState('9');
+  const [pageSizeInput, setPageSizeInput] = useState('12');
   const [viewMode, setViewMode] = useState<'diagram' | 'list'>('list');
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
