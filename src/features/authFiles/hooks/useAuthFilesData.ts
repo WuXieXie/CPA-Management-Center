@@ -20,6 +20,20 @@ type DeleteAllOptions = {
   onResetProblemOnly: () => void;
 };
 
+export type BatchTaskKey =
+  | 'upload'
+  | 'deleteAll'
+  | 'batchStatus'
+  | 'batchDownload'
+  | 'batchDelete';
+
+export type BatchTaskProgress = {
+  key: BatchTaskKey;
+  current: number;
+  total: number;
+  mode?: 'enable' | 'disable';
+};
+
 export type UseAuthFilesDataResult = {
   files: AuthFileItem[];
   selectedFiles: Set<string>;
@@ -31,6 +45,7 @@ export type UseAuthFilesDataResult = {
   deletingAll: boolean;
   statusUpdating: Record<string, boolean>;
   batchStatusUpdating: boolean;
+  batchTaskProgress: BatchTaskProgress | null;
   fileInputRef: RefObject<HTMLInputElement | null>;
   loadFiles: () => Promise<void>;
   handleUploadClick: () => void;
@@ -66,9 +81,11 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [batchStatusUpdating, setBatchStatusUpdating] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [batchTaskProgress, setBatchTaskProgress] = useState<BatchTaskProgress | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const batchStatusPendingRef = useRef(false);
+  const batchProgressMessageRef = useRef('');
   const selectionCount = selectedFiles.size;
   const toggleSelect = useCallback((name: string) => {
     setSelectedFiles((prev) => {
@@ -134,6 +151,37 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
     });
   }, [files, selectedFiles.size]);
 
+  useEffect(() => {
+    if (!batchTaskProgress || batchTaskProgress.total <= 0) {
+      batchProgressMessageRef.current = '';
+      return;
+    }
+
+    const actionLabel =
+      batchTaskProgress.key === 'upload'
+        ? t('auth_files.upload_button')
+        : batchTaskProgress.key === 'deleteAll'
+          ? t('auth_files.delete_all_button')
+          : batchTaskProgress.key === 'batchDownload'
+            ? t('auth_files.batch_download')
+            : batchTaskProgress.key === 'batchDelete'
+              ? t('auth_files.batch_delete_selected', { defaultValue: '删除选中' })
+              : batchTaskProgress.mode === 'disable'
+                ? t('auth_files.batch_disable')
+                : t('auth_files.batch_enable');
+
+    const message = t('auth_files.batch_progress_message', {
+      action: actionLabel,
+      current: batchTaskProgress.current,
+      total: batchTaskProgress.total,
+      defaultValue: '{{action}} 进度 {{current}}/{{total}}',
+    });
+
+    if (message === batchProgressMessageRef.current) return;
+    batchProgressMessageRef.current = message;
+    showNotification(message, 'info', 900);
+  }, [batchTaskProgress, showNotification, t]);
+
   const loadFiles = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -192,6 +240,11 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
       setUploading(true);
       let successCount = 0;
       const failed: { name: string; message: string }[] = [];
+      setBatchTaskProgress({
+        key: 'upload',
+        current: 0,
+        total: validFiles.length,
+      });
 
       for (const file of validFiles) {
         try {
@@ -200,6 +253,12 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
         } catch (err: unknown) {
           const errorMessage = err instanceof Error ? err.message : 'Unknown error';
           failed.push({ name: file.name, message: errorMessage });
+        } finally {
+          setBatchTaskProgress((prev) =>
+            prev?.key === 'upload'
+              ? { ...prev, current: Math.min(prev.total, prev.current + 1) }
+              : prev
+          );
         }
       }
 
@@ -219,6 +278,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
       }
 
       setUploading(false);
+      setBatchTaskProgress(null);
       event.target.value = '';
     },
     [loadFiles, refreshKeyStats, showNotification, t]
@@ -278,7 +338,17 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
           setDeletingAll(true);
           try {
             if (!isFiltered && !isProblemOnly) {
+              setBatchTaskProgress({
+                key: 'deleteAll',
+                current: 0,
+                total: 1,
+              });
               await authFilesApi.deleteAll();
+              setBatchTaskProgress({
+                key: 'deleteAll',
+                current: 1,
+                total: 1,
+              });
               showNotification(t('auth_files.delete_all_success'), 'success');
               setFiles((prev) => prev.filter((file) => isRuntimeOnlyAuthFile(file)));
               deselectAll();
@@ -304,6 +374,11 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
               let success = 0;
               let failed = 0;
               const deletedNames: string[] = [];
+              setBatchTaskProgress({
+                key: 'deleteAll',
+                current: 0,
+                total: filesToDelete.length,
+              });
 
               for (const file of filesToDelete) {
                 try {
@@ -312,6 +387,12 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
                   deletedNames.push(file.name);
                 } catch {
                   failed++;
+                } finally {
+                  setBatchTaskProgress((prev) =>
+                    prev?.key === 'deleteAll'
+                      ? { ...prev, current: Math.min(prev.total, prev.current + 1) }
+                      : prev
+                  );
                 }
               }
 
@@ -376,6 +457,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
             showNotification(`${t('notification.delete_failed')}: ${errorMessage}`, 'error');
           } finally {
             setDeletingAll(false);
+            setBatchTaskProgress(null);
           }
         },
       });
@@ -460,6 +542,12 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
 
       batchStatusPendingRef.current = true;
       setBatchStatusUpdating(true);
+      setBatchTaskProgress({
+        key: 'batchStatus',
+        current: 0,
+        total: targetNameList.length,
+        mode: enabled ? 'enable' : 'disable',
+      });
       setStatusUpdating((prev) => {
         const next = { ...prev };
         targetNameList.forEach((name) => {
@@ -474,8 +562,18 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
       );
 
       try {
+        let completed = 0;
         const results = await Promise.allSettled(
-          targetNameList.map((name) => authFilesApi.setStatus(name, nextDisabled))
+          targetNameList.map((name) =>
+            authFilesApi.setStatus(name, nextDisabled).finally(() => {
+              completed += 1;
+              setBatchTaskProgress((prev) =>
+                prev?.key === 'batchStatus'
+                  ? { ...prev, current: completed }
+                  : prev
+              );
+            })
+          )
         );
 
         let successCount = 0;
@@ -519,6 +617,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
       } finally {
         batchStatusPendingRef.current = false;
         setBatchStatusUpdating(false);
+        setBatchTaskProgress(null);
         setStatusUpdating((prev) => {
           const next = { ...prev };
           targetNameList.forEach((name) => {
@@ -538,6 +637,11 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
 
       let successCount = 0;
       let failCount = 0;
+      setBatchTaskProgress({
+        key: 'batchDownload',
+        current: 0,
+        total: uniqueNames.length,
+      });
 
       for (const name of uniqueNames) {
         try {
@@ -550,6 +654,12 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
           successCount++;
         } catch {
           failCount++;
+        } finally {
+          setBatchTaskProgress((prev) =>
+            prev?.key === 'batchDownload'
+              ? { ...prev, current: Math.min(prev.total, prev.current + 1) }
+              : prev
+          );
         }
       }
 
@@ -566,6 +676,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
       }
 
       deselectAll();
+      setBatchTaskProgress(null);
     },
     [deselectAll, showNotification, t]
   );
@@ -581,8 +692,23 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
         variant: 'danger',
         confirmText: t('common.confirm'),
         onConfirm: async () => {
+          setBatchTaskProgress({
+            key: 'batchDelete',
+            current: 0,
+            total: uniqueNames.length,
+          });
+          let completed = 0;
           const results = await Promise.allSettled(
-            uniqueNames.map((name) => authFilesApi.deleteFile(name))
+            uniqueNames.map((name) =>
+              authFilesApi.deleteFile(name).finally(() => {
+                completed += 1;
+                setBatchTaskProgress((prev) =>
+                  prev?.key === 'batchDelete'
+                    ? { ...prev, current: completed }
+                    : prev
+                );
+              })
+            )
           );
 
           const deleted: string[] = [];
@@ -632,6 +758,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
           }
 
           deselectAll();
+          setBatchTaskProgress(null);
         },
       });
     },
@@ -649,6 +776,7 @@ export function useAuthFilesData(options: UseAuthFilesDataOptions): UseAuthFiles
     deletingAll,
     statusUpdating,
     batchStatusUpdating,
+    batchTaskProgress,
     fileInputRef,
     loadFiles,
     handleUploadClick,

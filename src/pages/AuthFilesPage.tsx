@@ -403,6 +403,7 @@ export function AuthFilesPage() {
   const [sortMode, setSortMode] = useState<AuthFilesSortMode>('default');
   const [batchActionBarVisible, setBatchActionBarVisible] = useState(false);
   const [batchQuotaRefreshing, setBatchQuotaRefreshing] = useState(false);
+  const [batchQuotaProgress, setBatchQuotaProgress] = useState<{ current: number; total: number } | null>(null);
   const floatingBatchActionsRef = useRef<HTMLDivElement>(null);
   const batchActionAnimationRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
   const previousSelectionCountRef = useRef(0);
@@ -959,9 +960,11 @@ export function AuthFilesPage() {
     }
 
     setBatchQuotaRefreshing(true);
+    setBatchQuotaProgress({ current: 0, total: targets.length });
     const quotaStore = useQuotaStore.getState();
 
     try {
+      let completed = 0;
       const results = await Promise.allSettled(
         targets.map(async (file) => {
           const config = resolveQuotaConfigForFile(file);
@@ -987,6 +990,9 @@ export function AuthFilesPage() {
               [file.name]: config.buildErrorState(message, status),
             }));
             throw err;
+          } finally {
+            completed += 1;
+            setBatchQuotaProgress({ current: completed, total: targets.length });
           }
         })
       );
@@ -1022,6 +1028,7 @@ export function AuthFilesPage() {
     } finally {
       deselectAll();
       setBatchQuotaRefreshing(false);
+      setBatchQuotaProgress(null);
     }
   }, [batchQuotaRefreshing, deselectAll, files, resolveQuotaConfigForFile, selectedNames, showNotification, t]);
 
@@ -1264,6 +1271,25 @@ export function AuthFilesPage() {
             defaultValue: `清空 ${getTypeLabel(t, filter)}`,
           })
         : `${t('common.delete')} ${getTypeLabel(t, filter)}`;
+
+  const quotaProgressMessageRef = useRef('');
+
+  useEffect(() => {
+    if (!batchQuotaProgress || batchQuotaProgress.total <= 0) {
+      quotaProgressMessageRef.current = '';
+      return;
+    }
+
+    const message = t('auth_files.batch_quota_refresh_progress', {
+      current: batchQuotaProgress.current,
+      total: batchQuotaProgress.total,
+      defaultValue: '刷新选中配额进度 {{current}}/{{total}}',
+    });
+
+    if (message === quotaProgressMessageRef.current) return;
+    quotaProgressMessageRef.current = message;
+    showNotification(message, 'info', 900);
+  }, [batchQuotaProgress, showNotification, t]);
 
   return (
     <div className={styles.container}>
