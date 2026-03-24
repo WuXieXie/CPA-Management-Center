@@ -5,6 +5,33 @@
 import type { AxiosRequestConfig } from 'axios';
 import { apiClient } from './client';
 
+const API_CALL_MAX_CONCURRENCY = 30;
+
+let activeApiCallCount = 0;
+const pendingApiCallQueue: Array<() => void> = [];
+
+const scheduleNextApiCall = () => {
+  if (activeApiCallCount >= API_CALL_MAX_CONCURRENCY) return;
+  const next = pendingApiCallQueue.shift();
+  if (!next) return;
+  activeApiCallCount += 1;
+  next();
+};
+
+const runApiCallWithLimit = async <T>(task: () => Promise<T>): Promise<T> => {
+  await new Promise<void>((resolve) => {
+    pendingApiCallQueue.push(resolve);
+    scheduleNextApiCall();
+  });
+
+  try {
+    return await task();
+  } finally {
+    activeApiCallCount = Math.max(0, activeApiCallCount - 1);
+    scheduleNextApiCall();
+  }
+};
+
 export interface ApiCallRequest {
   authIndex?: string;
   method: string;
@@ -82,16 +109,18 @@ export const apiCallApi = {
     payload: ApiCallRequest,
     config?: AxiosRequestConfig
   ): Promise<ApiCallResult> => {
-    const response = await apiClient.post<Record<string, unknown>>('/api-call', payload, config);
-    const statusCode = Number(response?.status_code ?? response?.statusCode ?? 0);
-    const header = (response?.header ?? response?.headers ?? {}) as Record<string, string[]>;
-    const { bodyText, body } = normalizeBody(response?.body);
+    return runApiCallWithLimit(async () => {
+      const response = await apiClient.post<Record<string, unknown>>('/api-call', payload, config);
+      const statusCode = Number(response?.status_code ?? response?.statusCode ?? 0);
+      const header = (response?.header ?? response?.headers ?? {}) as Record<string, string[]>;
+      const { bodyText, body } = normalizeBody(response?.body);
 
-    return {
-      statusCode,
-      header,
-      bodyText,
-      body
-    };
+      return {
+        statusCode,
+        header,
+        bodyText,
+        body
+      };
+    });
   }
 };

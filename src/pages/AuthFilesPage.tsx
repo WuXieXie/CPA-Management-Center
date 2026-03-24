@@ -92,7 +92,7 @@ type EnabledStatusFilter = 'all' | 'enabled' | 'disabled';
 const MESSAGE_QUICK_FILTER_MATCHERS: Record<Exclude<MessageQuickFilter, 'all'>, string[]> = {
   usage_limit_reached: ['usage_limit_reached'],
   invalidated: ['your authentication token has been invalidated', 'invalidated'],
-  timeout: ['timeout', 'timed out'],
+  timeout: ['timeout', 'timed out', 'network error'],
   expired: ['expired', 'has expired', 'token expired', 'token is expired'],
 };
 
