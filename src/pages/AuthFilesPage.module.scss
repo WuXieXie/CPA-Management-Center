@@ -408,6 +408,11 @@
     flex-direction: column;
     align-items: stretch;
   }
+
+  @include mobile {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .filterControlsMain {
@@ -437,6 +442,10 @@
   width: 220px;
 
   @include tablet {
+    width: 100%;
+  }
+
+  @include mobile {
     width: 100%;
   }
 }
